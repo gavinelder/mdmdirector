@@ -67,9 +67,9 @@ func validateScepCert(certListItem types.CertificateList) error {
 	}
 	if cert.Issuer.CommonName == "MicroMDM" {
 		log.Info(cert.NotAfter)
-		end := time.Now().AddDate(0, 0, 30)
-		if cert.NotAfter.Before(end) {
-			log.Infof("Time is after %v for %v", end, cert.Issuer)
+		expiry := time.Now().AddDate(0, 0, 30)
+		if cert.NotAfter.Before(expiry) {
+			log.Infof("Time is after %v for %v", expiry, cert.Issuer)
 		} else {
 			log.Info("We would do some pushing on the enrollment profile here")
 		}

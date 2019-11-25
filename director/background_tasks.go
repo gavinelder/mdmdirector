@@ -18,30 +18,41 @@ import (
 	"github.com/pkg/errors"
 )
 
-const MAX = 5
-const DelaySeconds = 7200
-const HalfDelaySeconds = 7200 / 2
+const (
+	MAX              = 5
+	DelaySeconds     = 7200
+	HalfDelaySeconds = 7200 / 2
+)
 
 var DevicesFetchedFromMDM bool
 
-func RetryCommands() {
-	var delay time.Duration
+func RetryCommands() error {
+	var delay time.Duration = 120
 	if utils.DebugMode() {
 		delay = 20
-	} else {
-		delay = 120
 	}
 	ticker := time.NewTicker(delay * time.Second)
 	defer ticker.Stop()
-	fn := func() {
-		pushNotNow()
+	fn := func() error {
+		err := pushNotNow()
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
-	fn()
+	err := fn()
+	if err != nil {
+		return err
+	}
 
 	for range ticker.C {
-		fn()
+		err := fn()
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func pushNotNow() error {
@@ -63,7 +74,7 @@ func pushNotNow() error {
 		retry := time.Now().Unix() + 3600
 		endpoint.Path = path.Join(endpoint.Path, "push", queuedCommand.DeviceUDID)
 		queryString := endpoint.Query()
-		queryString.Set("expiration", string(strconv.FormatInt(retry, 10)))
+		queryString.Set("expiration", strconv.FormatInt(retry, 10))
 		endpoint.RawQuery = queryString.Encode()
 		req, err := http.NewRequest("GET", endpoint.String(), nil)
 		if err != nil {
@@ -131,7 +142,7 @@ func pushAll() error {
 	counter := 0
 	total := 0
 	devicesPerSecond := float64(len(devices)) / float64((DelaySeconds - 1))
-	var shuffledDevices = shuffleDevices(devices)
+	shuffledDevices := shuffleDevices(devices)
 	for i := range shuffledDevices {
 		device := shuffledDevices[i]
 		if float64(counter) >= devicesPerSecond {
@@ -154,7 +165,7 @@ func pushAll() error {
 
 func pushConcurrent(device types.Device, client *http.Client) {
 	now := time.Now()
-	var retry int64
+	var retry int64 = time.Now().Unix() + DelaySeconds
 	endpoint, err := url.Parse(utils.ServerURL())
 	if err != nil {
 		log.Error(err)
@@ -165,13 +176,11 @@ func pushConcurrent(device types.Device, client *http.Client) {
 	if now.After(device.NextPush) {
 		log.Infof("After scheduled push of %v for %v. Pushing with an expiry of 24 hours", device.NextPush, device.UDID)
 		retry = time.Now().Unix() + 86400
-	} else {
-		retry = time.Now().Unix() + DelaySeconds
 	}
 
 	endpoint.Path = path.Join(endpoint.Path, "push", device.UDID)
 	queryString := endpoint.Query()
-	queryString.Set("expiration", string(strconv.FormatInt(retry, 10)))
+	queryString.Set("expiration", strconv.FormatInt(retry, 10))
 	endpoint.RawQuery = queryString.Encode()
 	req, err := http.NewRequest("GET", endpoint.String(), nil)
 	if err != nil {
@@ -207,7 +216,7 @@ func PushDevice(udid string) error {
 
 	endpoint.Path = path.Join(endpoint.Path, "push", udid)
 	queryString := endpoint.Query()
-	queryString.Set("expiration", string(strconv.FormatInt(retry, 10)))
+	queryString.Set("expiration", strconv.FormatInt(retry, 10))
 	endpoint.RawQuery = queryString.Encode()
 	req, err := http.NewRequest("GET", endpoint.String(), nil)
 	if err != nil {
@@ -337,7 +346,7 @@ func FetchDevicesFromMDM() {
 	log.Info("Fetching devices from MicroMDM...")
 
 	// Handle Micro having a bad day
-	var client = &http.Client{
+	client := &http.Client{
 		Timeout: time.Second * 60,
 	}
 

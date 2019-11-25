@@ -38,7 +38,8 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if out.Topic == "mdm.CheckOut" {
+	switch {
+	case out.Topic == "mdm.CheckOut":
 		device.Active = false
 		device.AuthenticateRecieved = false
 		device.TokenUpdateRecieved = false
@@ -47,31 +48,32 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Error(err)
 		}
-	} else {
-		device.Active = true
-	}
-
-	if out.Topic == "mdm.Authenticate" {
+	case out.Topic == "mdm.Authenticate":
 		err = ResetDevice(device)
 		if err != nil {
 			log.Error(err)
 		}
-	} else if out.Topic == "mdm.TokenUpdate" {
-		tokenUpdateDevice, err := SetTokenUpdate(device)
+	case out.Topic == "mdm.TokenUpdate":
+		tokenUpdateDevice, tokenErr := SetTokenUpdate(device)
 		if err != nil {
-			log.Error(err)
+			log.Error(tokenErr)
 		}
-
 		if !tokenUpdateDevice.InitialTasksRun {
-			_, err := UpdateDevice(device)
+			_, updateErr := UpdateDevice(device)
 			if err != nil {
-				log.Error(err)
+				log.Error(updateErr)
 			}
 			log.Error("Running initial tasks due to device update")
-			RunInitialTasks(device.UDID)
+			initErr := RunInitialTasks(device.UDID)
+			if err != nil {
+				log.Error(initErr)
+			}
 			return
 		}
+	default:
+		device.Active = true
 	}
+
 	oldUDID := device.UDID
 	oldBuild := device.BuildVersion
 	if device.UDID == "" {
@@ -85,7 +87,10 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	if !updatedDevice.InitialTasksRun && updatedDevice.TokenUpdateRecieved {
 		log.Error("Running initial tasks due to device update")
-		RunInitialTasks(device.UDID)
+		initErr := RunInitialTasks(device.UDID)
+		if err != nil {
+			log.Error(initErr)
+		}
 		return
 	}
 
@@ -103,7 +108,10 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 			log.Error(err)
 		}
 		if out.AcknowledgeEvent.CommandUUID != "" {
-			UpdateCommand(out.AcknowledgeEvent, device)
+			err = UpdateCommand(out.AcknowledgeEvent, device)
+			if err != nil {
+				log.Error(err)
+			}
 		}
 
 		if out.AcknowledgeEvent.Status == "Idle" {
@@ -170,7 +178,10 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 				log.Error(err)
 			}
 			// utils.PrintStruct(deviceInformationQueryResponses.QueryResponses)
-			UpdateDevice(deviceInformationQueryResponses.QueryResponses)
+			_, err := UpdateDevice(deviceInformationQueryResponses.QueryResponses)
+			if err != nil {
+				return
+			}
 
 		}
 
@@ -201,8 +212,13 @@ func RequestDeviceUpdate(device types.Device) {
 	}
 	log.Debugf("Requesting Update device due to idle response from device %v", device.UDID)
 	RequestProfileList(device)
+
 	RequestSecurityInfo(device)
-	RequestDeviceInformation(device)
+
+	err = RequestDeviceInformation(device)
+	if err != nil {
+		return
+	}
 	RequestCertificateList(device)
 
 	// PushDevice(device.UDID)
@@ -232,7 +248,10 @@ func pushOnNewBuild(udid string, currentBuild string) error {
 			}
 
 			if oldVersion.LessThan(currentVersion) {
-				InstallAllProfiles(oldDevice)
+				_, err := InstallAllProfiles(oldDevice)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

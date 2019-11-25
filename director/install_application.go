@@ -49,20 +49,30 @@ func PostInstallApplicationHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				for _, item := range out.DeviceUDIDs {
-					device, err := GetDevice(item)
-					if err != nil {
+					device, getDevErr := GetDevice(item)
+					if getDevErr != nil {
 						log.Error(err)
 						http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 					}
 					devices = append(devices, device)
-					SaveInstallApplications(devices, out)
+					installErr := SaveInstallApplications(devices, out)
+					if installErr != nil {
+						log.Error(installErr)
+					}
 				}
-				SaveInstallApplications(devices, out)
+				saveIntallAppErr := SaveInstallApplications(devices, out)
+				if saveIntallAppErr != nil {
+					log.Error(saveIntallAppErr)
+				}
 				for _, ManifestURL := range out.ManifestURLs {
 					var installApplication types.DeviceInstallApplication
 					installApplication.ManifestURL = ManifestURL.URL
 					if !ManifestURL.BootstrapOnly {
-						PushInstallApplication(devices, installApplication)
+						_, pushInstallAppErr := PushInstallApplication(devices, installApplication)
+						if pushInstallAppErr != nil {
+							log.Error(pushInstallAppErr)
+						}
+
 					}
 				}
 			}
@@ -76,13 +86,19 @@ func PostInstallApplicationHandler(w http.ResponseWriter, r *http.Request) {
 					log.Error(err)
 					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				}
-				SaveSharedInstallApplications(out)
+				saveSharedInstallAppErr := SaveSharedInstallApplications(out)
+				if saveSharedInstallAppErr != nil {
+					log.Error(saveSharedInstallAppErr)
+				}
 				for _, ManifestURL := range out.ManifestURLs {
 					// Push these out to existing devices right now now now
 					var sharedInstallApplication types.SharedInstallApplication
 					sharedInstallApplication.ManifestURL = ManifestURL.URL
 					if !ManifestURL.BootstrapOnly {
-						PushSharedInstallApplication(devices, sharedInstallApplication)
+						_, pushInstallErr := PushSharedInstallApplication(devices, sharedInstallApplication)
+						if pushInstallErr != nil {
+							log.Error(pushInstallErr)
+						}
 					}
 				}
 			} else {
@@ -97,7 +113,10 @@ func PostInstallApplicationHandler(w http.ResponseWriter, r *http.Request) {
 					var installApplication types.DeviceInstallApplication
 					installApplication.ManifestURL = ManifestURL.URL
 					if !ManifestURL.BootstrapOnly {
-						PushInstallApplication(devices, installApplication)
+						_, pushInstallAppErr := PushInstallApplication(devices, installApplication)
+						if pushInstallAppErr != nil {
+							log.Error(pushInstallAppErr)
+						}
 					}
 				}
 			}
@@ -217,9 +236,9 @@ func InstallBootstrapPackages(device types.Device) ([]types.Command, error) {
 	// Push all the apps
 	for _, savedApp := range sharedInstallApplications {
 		log.Debugf("InstallApplication: %v", savedApp)
-		commands, err := PushSharedInstallApplication(devices, savedApp)
-		if err != nil {
-			return sentCommands, errors.Wrap(err, "InstallBootstrapPackages:PushSharedInstallApplication")
+		commands, pushSharedInstallErr := PushSharedInstallApplication(devices, savedApp)
+		if pushSharedInstallErr != nil {
+			return sentCommands, errors.Wrap(pushSharedInstallErr, "InstallBootstrapPackages:PushSharedInstallApplication")
 		}
 
 		sentCommands = append(sentCommands, commands...)
@@ -257,5 +276,8 @@ func GetSharedApplicationss(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
-	w.Write(output)
+	_, writeErr := w.Write(output)
+	if writeErr != nil {
+		log.Error(writeErr)
+	}
 }

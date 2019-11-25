@@ -41,9 +41,9 @@ func PostProfileHandler(w http.ResponseWriter, r *http.Request) {
 	for _, payload := range out.Mobileconfigs {
 		var profile types.DeviceProfile
 		var sharedProfile types.SharedProfile
-		mobileconfig, err := base64.StdEncoding.DecodeString(string(payload))
-		if err != nil {
-			log.Error(err)
+		mobileconfig, mcErr := base64.StdEncoding.DecodeString(payload)
+		if mcErr != nil {
+			log.Error(mcErr)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		err = plist.Unmarshal(mobileconfig, &profile)
@@ -116,13 +116,16 @@ func PostProfileHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				SaveSharedProfiles(sharedProfiles)
 				if out.PushNow {
-					PushSharedProfiles(devices, sharedProfiles)
+					_, pushSharedErr := PushSharedProfiles(devices, sharedProfiles)
+					if pushSharedErr != nil {
+						log.Error(pushSharedErr)
+					}
 				}
 			} else {
 				for _, item := range out.DeviceUDIDs {
-					device, err := GetDevice(item)
+					device, getDeviceErr := GetDevice(item)
 					if err != nil {
-						log.Error(err)
+						log.Error(getDeviceErr)
 						http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 					}
 					devices = append(devices, device)
@@ -144,7 +147,10 @@ func PostProfileHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				SaveSharedProfiles(sharedProfiles)
 				if out.PushNow {
-					PushSharedProfiles(devices, sharedProfiles)
+					_, pspErr := PushSharedProfiles(devices, sharedProfiles)
+					if pspErr != nil {
+						log.Error(pspErr)
+					}
 				}
 			} else {
 				for _, item := range out.SerialNumbers {
@@ -156,7 +162,11 @@ func PostProfileHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				SaveProfiles(devices, profiles)
 				if out.PushNow {
-					PushProfiles(devices, profiles)
+					_, ppErr := PushProfiles(devices, profiles)
+					if ppErr != nil {
+						log.Error(ppErr)
+					}
+
 				}
 			}
 		}
@@ -466,8 +476,8 @@ func SignProfile(key crypto.PrivateKey, cert *x509.Certificate, mobileconfig []b
 		return nil, errors.Wrap(err, "create signed data for mobileconfig")
 	}
 
-	if err := sd.AddSigner(cert, key, pkcs7.SignerInfoConfig{}); err != nil {
-		return nil, errors.Wrap(err, "add crypto signer to mobileconfig signed data")
+	if addSignerErr := sd.AddSigner(cert, key, pkcs7.SignerInfoConfig{}); err != nil {
+		return nil, errors.Wrap(addSignerErr, "add crypto signer to mobileconfig signed data")
 	}
 
 	signedMobileconfig, err := sd.Finish()
@@ -483,8 +493,11 @@ func loadSigningKey(keyPass, keyPath, certPath string) (crypto.PrivateKey, *x509
 
 	isP12 := filepath.Ext(certPath) == ".p12"
 	if isP12 {
-		pkey, cert, err := pkcs12.Decode(certData, keyPass)
-		return pkey, cert, errors.Wrap(err, "decode p12 contents")
+		pkey, cert, certErr := pkcs12.Decode(certData, keyPass)
+		if certErr != nil {
+			return nil, nil, errors.Wrap(certErr, "decode p12 contents")
+		}
+		return pkey, cert, nil
 	}
 
 	keyData, err := ioutil.ReadFile(keyPath)
