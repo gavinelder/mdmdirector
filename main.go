@@ -7,11 +7,11 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/mdmdirector/mdmdirector/db"
 	"github.com/mdmdirector/mdmdirector/director"
-	"github.com/mdmdirector/mdmdirector/log"
 	"github.com/mdmdirector/mdmdirector/types"
 	"github.com/mdmdirector/mdmdirector/utils"
+
 	"github.com/micromdm/go4/env"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // MicroMDMURL is the url for your MicroMDM server
@@ -52,7 +52,6 @@ var LogLevel string
 func main() {
 	var port string
 	var debugMode bool
-	logrus.SetLevel(logrus.DebugLevel)
 	flag.BoolVar(&debugMode, "debug", env.Bool("DEBUG", false), "Enable debug mode")
 	flag.BoolVar(&PushNewBuild, "push-new-build", env.Bool("PUSH_NEW_BUILD", true), "Re-push profiles if the device's build number changes.")
 	flag.StringVar(&port, "port", env.String("DIRECTOR_PORT", "8000"), "Port number to run mdmdirector on.")
@@ -66,6 +65,12 @@ func main() {
 	flag.StringVar(&DBConnectionString, "dbconnection", "", "Database connection string")
 	flag.StringVar(&LogLevel, "loglevel", env.String("LOG_LEVEL", "warn"), "Log level. One of debug, info, warn, error")
 	flag.Parse()
+
+	logLevel, err := log.ParseLevel(LogLevel)
+	if err != nil {
+		log.Errorf("Unable to parse the log level - %s \n", err)
+	}
+	log.SetLevel(logLevel)
 
 	if MicroMDMURL == "" {
 		log.Fatal("MicroMDM Server URL missing. Exiting.")
