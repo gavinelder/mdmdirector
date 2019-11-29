@@ -132,7 +132,10 @@ func PostProfileHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				SaveProfiles(devices, profiles)
 				if out.PushNow {
-					PushProfiles(devices, profiles)
+					_, pushErr := PushProfiles(devices, profiles)
+					if pushErr != nil {
+						log.Error(pushErr)
+					}
 				}
 			}
 		}
@@ -304,7 +307,7 @@ func SaveSharedProfiles(profiles []types.SharedProfile) {
 	tx2 := db.DB.Model(&profile)
 	for _, profileData := range profiles {
 		// utils.PrintStruct(profileData)
-		err := tx2.Create(&profileData).Error
+		err := tx2.Create(profileData).Error
 		if err != nil {
 			log.Error(err)
 		}
@@ -326,7 +329,10 @@ func DeleteSharedProfiles(devices []types.Device, profiles []types.SharedProfile
 			commandPayload.UDID = device.UDID
 			commandPayload.RequestType = "RemoveProfile"
 			commandPayload.Identifier = profileData.PayloadIdentifier
-			SendCommand(commandPayload)
+			_, sendErr := SendCommand(commandPayload)
+			if sendErr != nil {
+				log.Error()
+			}
 		}
 	}
 }
@@ -338,7 +344,10 @@ func DeleteDeviceProfiles(devices []types.Device, profiles []types.DeviceProfile
 			commandPayload.UDID = device.UDID
 			commandPayload.RequestType = "RemoveProfile"
 			commandPayload.Identifier = profileData.PayloadIdentifier
-			SendCommand(commandPayload)
+			_, sendErr := SendCommand(commandPayload)
+			if sendErr != nil {
+				log.Error(sendErr)
+			}
 		}
 	}
 }
@@ -411,7 +420,10 @@ func VerifyMDMProfiles(profileListData types.ProfileListData, device types.Devic
 	}
 
 	devices = append(devices, device)
-	PushProfiles(devices, profilesToInstall)
+	_, pushErr := PushProfiles(devices, profilesToInstall)
+	if err != nil {
+		log.Error(pushErr)
+	}
 
 	err = db.DB.Model(&sharedProfile).Find(&sharedProfiles).Where("installed = true").Scan(&sharedProfiles).Error
 	if err != nil {
@@ -432,7 +444,10 @@ func VerifyMDMProfiles(profileListData types.ProfileListData, device types.Devic
 		}
 	}
 
-	PushSharedProfiles(devices, sharedProfilesToInstall)
+	_, pushErr = PushSharedProfiles(devices, sharedProfilesToInstall)
+	if pushErr != nil {
+		log.Error(pushErr)
+	}
 }
 
 func GetDeviceProfiles(w http.ResponseWriter, r *http.Request) {
@@ -449,7 +464,10 @@ func GetDeviceProfiles(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
-	w.Write(output)
+	_, writeErr := w.Write(output)
+	if writeErr != nil {
+		log.Error(writeErr)
+	}
 }
 
 func GetSharedProfiles(w http.ResponseWriter, r *http.Request) {
@@ -465,7 +483,10 @@ func GetSharedProfiles(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
-	w.Write(output)
+	_, writeErr := w.Write(output)
+	if err != nil {
+		log.Error(writeErr)
+	}
 }
 
 // Sign takes an unsigned payload and signs it with the provided private key and certificate.
@@ -544,7 +565,10 @@ func RequestProfileList(device types.Device) {
 	commandPayload.UDID = device.UDID
 	commandPayload.RequestType = requestType
 
-	SendCommand(commandPayload)
+	_, sendErr := SendCommand(commandPayload)
+	if sendErr != nil {
+		log.Error(sendErr)
+	}
 }
 
 func InstallAllProfiles(device types.Device) ([]types.Command, error) {

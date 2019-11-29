@@ -135,7 +135,7 @@ func GetAllCommands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, writeErr := w.Write(output)
-	if err != nil {
+	if writeErr != nil {
 		log.Error(writeErr)
 	}
 }
